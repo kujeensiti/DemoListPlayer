@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="#3000"/>
+
+    <ImageView
+        android:id="@+id/imgPlayAudio"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:layout_centerVertical="true"
+        android:layout_margin="8dp"
+        android:src="@drawable/ic_play_arrow"
+        android:tint="@color/colorPrimary"/>
+
+    <SeekBar
+        android:id="@+id/sbMyAudio"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_centerVertical="true"
+        android:layout_toRightOf="@id/imgPlayAudio"/>
+
+</RelativeLayout>
