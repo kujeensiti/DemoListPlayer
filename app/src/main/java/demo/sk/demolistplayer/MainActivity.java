@@ -12,12 +12,23 @@ import android.view.ViewGroup;
 import android.widget.ImageView;
 import android.widget.SeekBar;
 
-import java.util.Arrays;
+import java.util.ArrayList;
 import java.util.List;
 
 public class MainActivity extends Activity {
 
-    private MediaPlayer mediaPlayer;
+    private AudioItemAdapter audioItemAdapter;
+
+    // POJO to hold data about audio items
+    private static class AudioItem {
+
+        // raw resource id of audio item
+        final int audioResId;
+
+        private AudioItem(int audioResId) {
+            this.audioResId = audioResId;
+        }
+    }
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
@@ -25,114 +36,194 @@ public class MainActivity extends Activity {
         setContentView(R.layout.activity_main);
 
         RecyclerView rv = (RecyclerView) findViewById(R.id.rv);
-        rv.setLayoutManager(new LinearLayoutManager(this));
-        AudioChat audioChats[] = new AudioChat[128];
-        rv.setAdapter(new MyAdapter(Arrays.asList(audioChats)));
 
+        // arrange cells in vertical column
+        rv.setLayoutManager(new LinearLayoutManager(this));
+
+        // add 256 stub audio items
+        ArrayList<AudioItem> audioItems = new ArrayList<>();
+        for (int i = 0; i < 256; i++) {
+            audioItems.add(new AudioItem(R.raw.mp3));
+        }
+        audioItemAdapter = new AudioItemAdapter(audioItems);
+        rv.setAdapter(audioItemAdapter);
     }
 
     @Override
     protected void onPause() {
         super.onPause();
-        if (null != mediaPlayer) {
-            mediaPlayer.release();
-            mediaPlayer = null;
-        }
+        audioItemAdapter.stopPlayer();
     }
 
-    private class MyAdapter extends RecyclerView.Adapter<MyAdapter.MyAudioChat> {
+    private class AudioItemAdapter extends RecyclerView.Adapter<AudioItemAdapter.AudioItemsViewHolder> {
 
-        private List<AudioChat> audioChats;
+        private MediaPlayer mediaPlayer;
+
+        private List<AudioItem> audioItems;
         private int currentPlayingPosition;
         private SeekBarUpdater seekBarUpdater;
+        private AudioItemsViewHolder playingHolder;
 
-        MyAdapter(List<AudioChat> audioChats) {
-            this.audioChats = audioChats;
+        AudioItemAdapter(List<AudioItem> audioItems) {
+            this.audioItems = audioItems;
             this.currentPlayingPosition = -1;
             seekBarUpdater = new SeekBarUpdater();
         }
 
         @Override
-        public MyAudioChat onCreateViewHolder(ViewGroup parent, int viewType) {
-            return new MyAudioChat(LayoutInflater.from(parent.getContext()).inflate(R.layout.item, parent, false));
+        public AudioItemsViewHolder onCreateViewHolder(ViewGroup parent, int viewType) {
+            return new AudioItemsViewHolder(LayoutInflater.from(parent.getContext()).inflate(R.layout.item, parent, false));
         }
 
         @Override
-        public void onBindViewHolder(MyAudioChat holder, int position) {
+        public void onBindViewHolder(AudioItemsViewHolder holder, int position) {
             if (position == currentPlayingPosition) {
-                seekBarUpdater.playingHolder = holder;
-                holder.sbMyAudio.post(seekBarUpdater);
+                playingHolder = holder;
+                // this view holder corresponds to the currently playing audio item
+                // update its view to show playing progress
+                updatePlayingView();
             } else {
-                holder.sbMyAudio.removeCallbacks(seekBarUpdater);
-                holder.sbMyAudio.setProgress(0);
+                updateNonPlayingView(holder);
+            }
+        }
+
+
+        @Override
+        public void onViewRecycled(AudioItemsViewHolder holder) {
+            super.onViewRecycled(holder);
+            if (currentPlayingPosition == holder.getAdapterPosition()) {
+                updateNonPlayingView(playingHolder);
+                playingHolder = null;
+            }
+        }
+
+        /**
+         * Changes the view to non playing state
+         * - icon is changed to play arrow
+         * - seek bar disabled and remove update listener
+         *
+         * @param holder
+         */
+        private void updateNonPlayingView(AudioItemsViewHolder holder) {
+            holder.sbProgress.removeCallbacks(seekBarUpdater);
+            holder.sbProgress.setEnabled(false);
+            holder.sbProgress.setProgress(0);
+            holder.ivPlayPause.setImageResource(R.drawable.ic_play_arrow);
+        }
+
+        /**
+         * Changes the view to playing state
+         * - icon is changed to pause
+         * - seek bar enabled
+         * - update listener added to seek bar, if needed
+         */
+        private void updatePlayingView() {
+            playingHolder.sbProgress.setMax(mediaPlayer.getDuration());
+            playingHolder.sbProgress.setProgress(mediaPlayer.getCurrentPosition());
+            playingHolder.sbProgress.setEnabled(true);
+            if (mediaPlayer.isPlaying()) {
+                playingHolder.sbProgress.postDelayed(seekBarUpdater, 100);
+                playingHolder.ivPlayPause.setImageResource(R.drawable.ic_pause);
+            } else {
+                playingHolder.sbProgress.removeCallbacks(seekBarUpdater);
+                playingHolder.ivPlayPause.setImageResource(R.drawable.ic_play_arrow);
+            }
+        }
+
+        void stopPlayer() {
+            if (null != mediaPlayer) {
+                releaseMediaPlayer();
             }
         }
 
         private class SeekBarUpdater implements Runnable {
-            MyAudioChat playingHolder;
-
             @Override
             public void run() {
-                if (null != mediaPlayer && playingHolder.getAdapterPosition() == currentPlayingPosition) {
-                    playingHolder.sbMyAudio.setMax(mediaPlayer.getDuration());
-                    playingHolder.sbMyAudio.setProgress(mediaPlayer.getCurrentPosition());
-                    playingHolder.sbMyAudio.postDelayed(this, 100);
-                } else {
-                    playingHolder.sbMyAudio.removeCallbacks(seekBarUpdater);
+                if (null != playingHolder) {
+                    playingHolder.sbProgress.setProgress(mediaPlayer.getCurrentPosition());
+                    playingHolder.sbProgress.postDelayed(this, 100);
                 }
             }
         }
 
         @Override
         public int getItemCount() {
-            return audioChats.size();
+            return audioItems.size();
         }
 
-        class MyAudioChat extends RecyclerView.ViewHolder implements View.OnClickListener {
-            SeekBar sbMyAudio;
-            ImageView imgPlayAudio;
+        // interaction listeners e.g. click, seekBarChange etc are handled in the view holder itself
+        class AudioItemsViewHolder extends RecyclerView.ViewHolder implements View.OnClickListener, SeekBar.OnSeekBarChangeListener {
+            SeekBar sbProgress;
+            ImageView ivPlayPause;
 
-            MyAudioChat(View itemView) {
+            AudioItemsViewHolder(View itemView) {
                 super(itemView);
-                imgPlayAudio = (ImageView) itemView.findViewById(R.id.imgPlayAudio);
-                imgPlayAudio.setOnClickListener(this);
-                sbMyAudio = (SeekBar) itemView.findViewById(R.id.sbMyAudio);
+                ivPlayPause = (ImageView) itemView.findViewById(R.id.ivPlayPause);
+                ivPlayPause.setOnClickListener(this);
+                sbProgress = (SeekBar) itemView.findViewById(R.id.sbProgress);
+                sbProgress.setOnSeekBarChangeListener(this);
             }
 
             @Override
             public void onClick(View v) {
-                currentPlayingPosition = getAdapterPosition();
-                if (mediaPlayer != null) {
-                    if (null != seekBarUpdater.playingHolder) {
-                        seekBarUpdater.playingHolder.sbMyAudio.removeCallbacks(seekBarUpdater);
-                        seekBarUpdater.playingHolder.sbMyAudio.setProgress(0);
+                if (getAdapterPosition() == currentPlayingPosition) {
+                    // toggle between play/pause of audio
+                    if (mediaPlayer.isPlaying()) {
+                        mediaPlayer.pause();
+                    } else {
+                        mediaPlayer.start();
                     }
-                    mediaPlayer.release();
+                } else {
+                    // start another audio playback
+                    currentPlayingPosition = getAdapterPosition();
+                    if (mediaPlayer != null) {
+                        if (null != playingHolder) {
+                            updateNonPlayingView(playingHolder);
+                        }
+                        mediaPlayer.release();
+                    }
+                    playingHolder = this;
+                    startMediaPlayer(audioItems.get(currentPlayingPosition).audioResId);
                 }
-                seekBarUpdater.playingHolder = this;
-                startMediaPlayer();
-                sbMyAudio.setMax(mediaPlayer.getDuration());
-                sbMyAudio.post(seekBarUpdater);
+                updatePlayingView();
+            }
+
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                if (fromUser) {
+                    mediaPlayer.seekTo(progress);
+                }
+            }
+
+            @Override
+            public void onStartTrackingTouch(SeekBar seekBar) {
+            }
+
+            @Override
+            public void onStopTrackingTouch(SeekBar seekBar) {
             }
         }
 
-        private void startMediaPlayer() {
-            mediaPlayer = MediaPlayer.create(getApplicationContext(), R.raw.mp3);
+        private void startMediaPlayer(int audioResId) {
+            mediaPlayer = MediaPlayer.create(getApplicationContext(), audioResId);
             mediaPlayer.setOnCompletionListener(new MediaPlayer.OnCompletionListener() {
                 @Override
                 public void onCompletion(MediaPlayer mp) {
-                    seekBarUpdater.playingHolder.sbMyAudio.removeCallbacks(seekBarUpdater);
-                    seekBarUpdater.playingHolder.sbMyAudio.setProgress(0);
-                    mediaPlayer.release();
-                    mediaPlayer = null;
-                    currentPlayingPosition = -1;
+                    releaseMediaPlayer();
                 }
             });
             mediaPlayer.start();
         }
+
+        private void releaseMediaPlayer() {
+            if (null != playingHolder) {
+                updateNonPlayingView(playingHolder);
+            }
+            mediaPlayer.release();
+            mediaPlayer = null;
+            currentPlayingPosition = -1;
+        }
+
     }
 
-    private class AudioChat {
-
-    }
 }
