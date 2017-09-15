@@ -9,12 +9,20 @@
         android:layout_height="1dp"
         android:background="#3000"/>
 
+    <TextView
+        android:id="@+id/tvIndex"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_centerVertical="true"
+        android:layout_marginLeft="16dp"/>
+
     <ImageView
         android:id="@+id/ivPlayPause"
         android:layout_width="48dp"
         android:layout_height="48dp"
         android:layout_centerVertical="true"
         android:layout_margin="8dp"
+        android:layout_toRightOf="@id/tvIndex"
         android:src="@drawable/ic_play_arrow"
         android:tint="@color/colorPrimary"/>
 
